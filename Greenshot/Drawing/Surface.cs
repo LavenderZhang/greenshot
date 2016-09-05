@@ -799,64 +799,78 @@ namespace Greenshot.Drawing
 		#region Plugin interface implementations
 		public IImageContainer AddImageContainer(Image image, int x, int y)
 		{
-			ImageContainer bitmapContainer = new ImageContainer(this);
-			bitmapContainer.Image = image;
-			bitmapContainer.Left = x;
-			bitmapContainer.Top = y;
+			ImageContainer bitmapContainer = new ImageContainer(this)
+			{
+				Image = image,
+				Left = x,
+				Top = y
+			};
 			AddElement(bitmapContainer);
 			return bitmapContainer;
 		}
 
 		public IImageContainer AddImageContainer(string filename, int x, int y)
 		{
-			ImageContainer bitmapContainer = new ImageContainer(this);
+			ImageContainer bitmapContainer = new ImageContainer(this)
+			{
+				Left = x,
+				Top = y
+			};
 			bitmapContainer.Load(filename);
-			bitmapContainer.Left = x;
-			bitmapContainer.Top = y;
 			AddElement(bitmapContainer);
 			return bitmapContainer;
 		}
 		public IIconContainer AddIconContainer(Icon icon, int x, int y)
 		{
-			IconContainer iconContainer = new IconContainer(this);
-			iconContainer.Icon = icon;
-			iconContainer.Left = x;
-			iconContainer.Top = y;
+			IconContainer iconContainer = new IconContainer(this)
+			{
+				Icon = icon,
+				Left = x,
+				Top = y
+			};
 			AddElement(iconContainer);
 			return iconContainer;
 		}
 		public IIconContainer AddIconContainer(string filename, int x, int y)
 		{
-			IconContainer iconContainer = new IconContainer(this);
+			IconContainer iconContainer = new IconContainer(this)
+			{
+				Left = x,
+				Top = y
+			};
 			iconContainer.Load(filename);
-			iconContainer.Left = x;
-			iconContainer.Top = y;
 			AddElement(iconContainer);
 			return iconContainer;
 		}
 		public ICursorContainer AddCursorContainer(Cursor cursor, int x, int y)
 		{
-			CursorContainer cursorContainer = new CursorContainer(this);
-			cursorContainer.Cursor = cursor;
-			cursorContainer.Left = x;
-			cursorContainer.Top = y;
+			CursorContainer cursorContainer = new CursorContainer(this)
+			{
+				Cursor = cursor,
+				Left = x,
+				Top = y
+			};
 			AddElement(cursorContainer);
 			return cursorContainer;
 		}
 		public ICursorContainer AddCursorContainer(string filename, int x, int y)
 		{
-			CursorContainer cursorContainer = new CursorContainer(this);
+			CursorContainer cursorContainer = new CursorContainer(this)
+			{
+				Left = x,
+				Top = y
+			};
 			cursorContainer.Load(filename);
-			cursorContainer.Left = x;
-			cursorContainer.Top = y;
 			AddElement(cursorContainer);
 			return cursorContainer;
 		}
 
 		public ITextContainer AddTextContainer(string text, HorizontalAlignment horizontalAlignment, VerticalAlignment verticalAlignment, FontFamily family, float size, bool italic, bool bold, bool shadow, int borderSize, Color color, Color fillColor)
 		{
-			TextContainer textContainer = new TextContainer(this);
-			textContainer.Text = text;
+			TextContainer textContainer = new TextContainer(this)
+			{
+				Text = text
+			};
 			textContainer.SetFieldValue(FieldType.FONT_FAMILY, family.Name);
 			textContainer.SetFieldValue(FieldType.FONT_BOLD, bold);
 			textContainer.SetFieldValue(FieldType.FONT_ITALIC, italic);
@@ -887,6 +901,7 @@ namespace Greenshot.Drawing
 				{
 					LOG.Debug(format);
 				}
+				string test = ClipboardHelper.GetText(e.Data);
 			}
 			if ((e.AllowedEffect & DragDropEffects.Copy) != DragDropEffects.Copy)
 			{
@@ -915,16 +930,20 @@ namespace Greenshot.Drawing
 			Point mouse = PointToClient(new Point(e.X, e.Y));
 			if (e.Data.GetDataPresent("Text"))
 			{
-				string possibleUrl = ClipboardHelper.GetText(e.Data);
 				// Test if it's an url and try to download the image so we have it in the original form
-				if (possibleUrl != null && possibleUrl.StartsWith("http"))
+				string possibleUrl = ClipboardHelper.GetText(e.Data);
+				Uri imageUri;
+				if (Uri.TryCreate(possibleUrl, UriKind.RelativeOrAbsolute, out imageUri))
 				{
-					using (Image image = NetworkHelper.DownloadImage(possibleUrl))
+					if (imageUri.Scheme.StartsWith("http"))
 					{
-						if (image != null)
+						using (Image image = NetworkHelper.DownloadImage(possibleUrl))
 						{
-							AddImageContainer(image, mouse.X, mouse.Y);
-							return;
+							if (image != null)
+							{
+								AddImageContainer(image, mouse.X, mouse.Y);
+								return;
+							}
 						}
 					}
 				}

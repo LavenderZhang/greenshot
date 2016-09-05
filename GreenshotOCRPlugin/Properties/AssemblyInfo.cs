@@ -34,8 +34,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright (C) 2007-2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
+
 // The PluginAttribute describes the "entryType" and if the plugin is configurable
-[assembly: PluginAttribute("GreenshotOCR.OcrPlugin", true)]
+[assembly: Plugin("GreenshotOCR.OcrPlugin", true)]
 
 // This sets the default COM visibility of types in the assembly to invisible.
 // If you need to expose a type to COM, use [ComVisible(true)] on that type.

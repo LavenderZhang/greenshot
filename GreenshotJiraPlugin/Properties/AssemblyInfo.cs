@@ -34,6 +34,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright (C) 2007-2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
+
 // The PluginAttribute describes the "entryType" and if the plugin is configurable
 [assembly: Plugin("GreenshotJiraPlugin.JiraPlugin", true)]
 

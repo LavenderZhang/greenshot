@@ -129,13 +129,12 @@
 del /q /s "$(SolutionDir)Greenshot\bin\$(Configuration)\Plugins\$(ProjectName)"\*
 
 if "$(ConfigurationName)" == "Release" (
-    ..\..\..\packages\LibZ.Tool.1.2.0.0\tools\libz.exe inject-dll --assembly $(ProjectDir)bin\$(Configuration)\$(TargetFileName) --include $(ProjectDir)bin\$(Configuration)\dapplo*.dll --include $(ProjectDir)bin\$(Configuration)\svg.dll --move
+    ..\..\..\packages\LibZ.Tool.1.2.0.0\tools\libz.exe inject-dll --assembly $(ProjectDir)bin\$(Configuration)\$(TargetFileName) --include $(ProjectDir)bin\$(Configuration)\dapplo*.dll --move
 )
 copy "$(ProjectDir)bin\$(Configuration)\$(TargetFileName)" "$(SolutionDir)Greenshot\bin\$(Configuration)\Plugins\$(ProjectName)\*.gsp"
 
 if "$(ConfigurationName)" == "Debug" (
     copy "$(ProjectDir)bin\$(Configuration)\Dapplo.*" "$(SolutionDir)Greenshot\bin\$(Configuration)\Plugins\$(ProjectName)\"
-    copy "$(ProjectDir)bin\$(Configuration)\Svg.dll" "$(SolutionDir)Greenshot\bin\$(Configuration)\Plugins\$(ProjectName)\"
     copy "$(ProjectDir)bin\$(Configuration)\$(ProjectName).pdb" "$(SolutionDir)Greenshot\bin\$(Configuration)\Plugins\$(ProjectName)\"
 )
 

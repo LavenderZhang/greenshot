@@ -108,7 +108,7 @@ namespace Greenshot.Helpers
 					environment.Append(", ");
 				}
 				// Get some important information for fixing GDI related Problems
-				environment.AppendFormat("GDI object count: {0}", User32.GetGuiResourcesGDICount());
+				environment.AppendFormat("GDI object count: {0}", User32.GetGuiResourcesGdiCount());
 				if (newline)
 				{
 					environment.AppendLine();

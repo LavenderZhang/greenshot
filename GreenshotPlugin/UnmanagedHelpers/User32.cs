@@ -291,7 +291,7 @@ namespace GreenshotPlugin.UnmanagedHelpers {
 			}
 		}
 
-		public static uint GetGuiResourcesGDICount() {
+		public static uint GetGuiResourcesGdiCount() {
 			using (Process currentProcess = Process.GetCurrentProcess()) {
 				return GetGuiResources(currentProcess.Handle, 0);
 			}

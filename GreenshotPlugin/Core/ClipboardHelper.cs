@@ -264,7 +264,7 @@ EndSelection:<<<<<<<4
 				if (dataObject.GetDataPresent(FORMAT_FILECONTENTS)) {
 					try {
 						MemoryStream imageStream = dataObject.GetData(FORMAT_FILECONTENTS) as MemoryStream;
-						if (isValidStream(imageStream)) {
+						if (IsValidStream(imageStream)) {
 							using (Image tmpImage = Image.FromStream(imageStream)) {
 								// If we get here, there is an image
 								return true;
@@ -282,7 +282,7 @@ EndSelection:<<<<<<<4
 		/// </summary>
 		/// <param name="memoryStream"></param>
 		/// <returns></returns>
-		private static bool isValidStream(MemoryStream memoryStream) {
+		private static bool IsValidStream(MemoryStream memoryStream) {
 			return memoryStream != null && memoryStream.Length > 0;
 		}
 
@@ -378,7 +378,7 @@ EndSelection:<<<<<<<4
 		private static Image GetImageForFormat(string format, IDataObject dataObject) {
 			object clipboardObject = GetFromDataObject(dataObject, format);
 			MemoryStream imageStream = clipboardObject as MemoryStream;
-			if (!isValidStream(imageStream)) {
+			if (!IsValidStream(imageStream)) {
 				// TODO: add "HTML Format" support here...
 				return clipboardObject as Image;
 			} else {

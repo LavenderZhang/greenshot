@@ -25,7 +25,6 @@ using log4net;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -50,6 +49,7 @@ namespace GreenshotPlugin.Core {
 	public static class NetworkHelper {
 		private static readonly ILog LOG = LogManager.GetLogger(typeof(NetworkHelper));
 		private static readonly CoreConfiguration Config = IniConfig.GetIniSection<CoreConfiguration>();
+		private static readonly Regex ImageUrlRegex = new Regex(@"(http|https)://.*(?<extension>\.png|\.gif|\.jpg|\.tiff|\.jpeg|\.bmp|\.ico|\.wmf|\.greenshot|\.svg)", RegexOptions.Compiled);
 
 		static NetworkHelper() {
 			try
@@ -131,30 +131,28 @@ namespace GreenshotPlugin.Core {
 		/// <param name="url">Of an image</param>
 		/// <returns>Bitmap</returns>
 		public static Image DownloadImage(string url) {
-			try {
-				string content;
-				using (MemoryStream memoryStream = GetAsMemoryStream(url)) {
-					try {
-						using (Image image = Image.FromStream(memoryStream)) {
-							return ImageHelper.Clone(image, PixelFormat.Format32bppArgb);
-						}
+			Match match = ImageUrlRegex.Match(url);
+
+			try
+			{
+				using (var memoryStream = GetAsMemoryStream(url)) {
+					try
+					{
+						return ImageHelper.FromStream(memoryStream, match.Success ? match.Groups["extension"]?.Value : null);
 					} catch (Exception) {
 						// If we arrive here, the image loading didn't work, try to see if the response has a http(s) URL to an image and just take this instead.
+						string content;
 						using (StreamReader streamReader = new StreamReader(memoryStream, Encoding.UTF8, true)) {
 							content = streamReader.ReadLine();
 						}
 						if (!string.IsNullOrEmpty(content))
 						{
-							Regex imageUrlRegex = new Regex(@"(http|https)://.*(\.png|\.gif|\.jpg|\.tiff|\.jpeg|\.bmp)");
-							Match match = imageUrlRegex.Match(content);
+							match = ImageUrlRegex.Match(content);
 							if (match.Success)
 							{
-								using (MemoryStream memoryStream2 = GetAsMemoryStream(match.Value))
+								using (var memoryStream2 = GetAsMemoryStream(match.Value))
 								{
-									using (Image image = Image.FromStream(memoryStream2))
-									{
-										return ImageHelper.Clone(image, PixelFormat.Format32bppArgb);
-									}
+									return ImageHelper.FromStream(memoryStream2, match.Groups["extension"]?.Value);
 								}
 							}
 						}
@@ -474,7 +472,7 @@ namespace GreenshotPlugin.Core {
 			string responseData = null;
 			HttpWebResponse response = null;
 			bool isHttpError = false;
-            try {
+			try {
 				response = (HttpWebResponse)webRequest.GetResponse();
 				LOG.InfoFormat("Response status: {0}", response.StatusCode);
 				isHttpError = (int)response.StatusCode >= 300;

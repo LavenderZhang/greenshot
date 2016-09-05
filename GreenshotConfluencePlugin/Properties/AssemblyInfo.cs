@@ -22,7 +22,6 @@
 using Greenshot.Plugin;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security;
 
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
@@ -35,15 +34,14 @@ using System.Security;
 [assembly: AssemblyCopyright("Copyright (C) 2007-2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
+
 // The PluginAttribute describes the "entryType" and if the plugin is configurable
-[assembly: PluginAttribute("GreenshotConfluencePlugin.ConfluencePlugin", true)]
+[assembly: Plugin("GreenshotConfluencePlugin.ConfluencePlugin", true)]
 
 // This sets the default COM visibility of types in the assembly to invisible.
 // If you need to expose a type to COM, use [ComVisible(true)] on that type.
 [assembly: ComVisible(false)]
 
-// Solve Link-Demand issues
-[assembly: SecurityTransparent]
 
 // The assembly version, replaced by build scripts
 [assembly: AssemblyVersion("1.2.0.0")]

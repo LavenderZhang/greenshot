@@ -43,6 +43,7 @@ using Greenshot.IniFile;
 using Greenshot.Destinations;
 using log4net;
 using Timer = System.Timers.Timer;
+using Greenshot.Drawing;
 
 namespace Greenshot {
 	/// <summary>
@@ -320,6 +321,8 @@ namespace Greenshot {
 		public MainForm(CopyDataTransport dataTransport) {
 			_instance = this;
 
+			// A surface factory, this is needed as the Surface class is not available outside this project
+			ImageHelper.CreateSurface = () => new Surface();
 			//
 			// The InitializeComponent() call is required for Windows Forms designer support.
 			//

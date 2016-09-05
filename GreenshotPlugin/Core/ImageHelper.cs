@@ -27,7 +27,9 @@ using System.IO;
 using Greenshot.IniFile;
 using GreenshotPlugin.UnmanagedHelpers;
 using Greenshot.Core;
+using Greenshot.Plugin;
 using log4net;
+using Svg;
 
 namespace GreenshotPlugin.Core {
 	internal enum ExifOrientations : byte {
@@ -46,26 +48,30 @@ namespace GreenshotPlugin.Core {
 	/// Description of ImageHelper.
 	/// </summary>
 	public static class ImageHelper {
-		private static readonly ILog LOG = LogManager.GetLogger(typeof(ImageHelper));
-		private static readonly CoreConfiguration conf = IniConfig.GetIniSection<CoreConfiguration>();
-		private const int EXIF_ORIENTATION_ID = 0x0112;
+		private static readonly ILog Log = LogManager.GetLogger(typeof(ImageHelper));
+		private static readonly CoreConfiguration CoreConfig = IniConfig.GetIniSection<CoreConfiguration>();
+		private const int ExifOrientationId = 0x0112;
 
+		/// <summary>
+		/// This is a factory method to create a surface, set from the Greenshot main project
+		/// </summary>
+		public static Func<ISurface> CreateSurface { get; set; }
 		/// <summary>
 		/// Make sure the image is orientated correctly
 		/// </summary>
 		/// <param name="image"></param>
 		public static void Orientate(Image image) {
-			if (!conf.ProcessEXIFOrientation) {
+			if (!CoreConfig.ProcessEXIFOrientation) {
 				return;
 			}
 			try {
 				// Get the index of the orientation property.
-				int orientationIndex = Array.IndexOf(image.PropertyIdList, EXIF_ORIENTATION_ID);
+				int orientationIndex = Array.IndexOf(image.PropertyIdList, ExifOrientationId);
 				// If there is no such property, return Unknown.
 				if (orientationIndex < 0) {
 					return;
 				}
-				PropertyItem item = image.GetPropertyItem(EXIF_ORIENTATION_ID);
+				PropertyItem item = image.GetPropertyItem(ExifOrientationId);
 
 				ExifOrientations orientation = (ExifOrientations)item.Value[0];
 				// Orient the image.
@@ -99,19 +105,8 @@ namespace GreenshotPlugin.Core {
 				item.Value[0] = (byte)ExifOrientations.TopLeft;
 				image.SetPropertyItem(item);
 			} catch (Exception orientEx) {
-				LOG.Warn("Problem orientating the image: ", orientEx);
+				Log.Warn("Problem orientating the image: ", orientEx);
 			}
-		}
-
-		/// <summary>
-		/// Create a thumbnail from an image
-		/// </summary>
-		/// <param name="image"></param>
-		/// <param name="thumbWidth"></param>
-		/// <param name="thumbHeight"></param>
-		/// <returns></returns>
-		public static Image CreateThumbnail(Image image, int thumbWidth, int thumbHeight) {
-			return CreateThumbnail(image, thumbWidth, thumbHeight, -1, -1);
 		}
 
 		/// <summary>
@@ -123,7 +118,7 @@ namespace GreenshotPlugin.Core {
 		/// <param name="maxWidth"></param>
 		/// <param name="maxHeight"></param>
 		/// <returns></returns>
-		public static Image CreateThumbnail(Image image, int thumbWidth, int thumbHeight, int maxWidth, int maxHeight) {
+		public static Image CreateThumbnail(Image image, int thumbWidth, int thumbHeight, int maxWidth = -1, int maxHeight = -1) {
 			int srcWidth=image.Width;
 			int srcHeight=image.Height; 
 			if (thumbHeight < 0) {
@@ -159,17 +154,16 @@ namespace GreenshotPlugin.Core {
 		/// <param name="image">Image to crop</param>
 		/// <param name="cropRectangle">Rectangle with bitmap coordinates, will be "intersected" to the bitmap</param>
 		public static bool Crop(ref Image image, ref Rectangle cropRectangle) {
-			Image returnImage = null;
-			if (image != null && image is Bitmap && ((image.Width * image.Height) > 0))  {
+			if (image is Bitmap && (image.Width * image.Height > 0))  {
 				cropRectangle.Intersect(new Rectangle(0,0, image.Width, image.Height));
 				if (cropRectangle.Width != 0 || cropRectangle.Height != 0) {
-					returnImage = CloneArea(image, cropRectangle, PixelFormat.DontCare);
+					Image returnImage = CloneArea(image, cropRectangle, PixelFormat.DontCare);
 					image.Dispose();
 					image = returnImage;
 					return true;
 				}
 			}
-			LOG.Warn("Can't crop a null/zero size image!");
+			Log.Warn("Can't crop a null/zero size image!");
 			return false;
 		}
 
@@ -193,7 +187,7 @@ namespace GreenshotPlugin.Core {
 						int diffR = Math.Abs(currentColor.R - referenceColor.R);
 						int diffG = Math.Abs(currentColor.G - referenceColor.G);
 						int diffB = Math.Abs(currentColor.B - referenceColor.B);
-						if (((diffR + diffG + diffB)/3) <= cropDifference) {
+						if ((diffR + diffG + diffB)/3 <= cropDifference) {
 							continue;
 						}
 						if (x < min.X) min.X = x;
@@ -233,20 +227,22 @@ namespace GreenshotPlugin.Core {
 		/// <returns>Rectangle</returns>
 		public static Rectangle FindAutoCropRectangle(Image image, int cropDifference) {
 			Rectangle cropRectangle = Rectangle.Empty;
-			Rectangle currentRectangle;
-			List<Point> checkPoints = new List<Point>();
+			var checkPoints = new List<Point>
+			{
+				new Point(0, 0),
+				new Point(0, image.Height - 1),
+				new Point(image.Width - 1, 0),
+				new Point(image.Width - 1, image.Height - 1)
+			};
 			// Top Left
-			checkPoints.Add(new Point(0, 0));
 			// Bottom Left
-			checkPoints.Add(new Point(0, image.Height - 1));
 			// Top Right
-			checkPoints.Add(new Point(image.Width - 1, 0));
 			// Bottom Right
-			checkPoints.Add(new Point(image.Width - 1, image.Height - 1));
 			using (IFastBitmap fastBitmap = FastBitmap.Create((Bitmap)image)) {
 				// find biggest area
-				foreach(Point checkPoint in checkPoints) {
-					currentRectangle = FindAutoCropRectangle(fastBitmap, checkPoint, cropDifference);
+				foreach(Point checkPoint in checkPoints)
+				{
+					var currentRectangle = FindAutoCropRectangle(fastBitmap, checkPoint, cropDifference);
 					if (currentRectangle.Width * currentRectangle.Height > cropRectangle.Width * cropRectangle.Height) {
 						cropRectangle = currentRectangle;
 					}
@@ -267,53 +263,16 @@ namespace GreenshotPlugin.Core {
 			if (!File.Exists(filename)) {
 				return null;
 			}
-			Image fileImage = null;
-			LOG.InfoFormat("Loading image from file {0}", filename);
+			Image fileImage;
+			Log.InfoFormat("Loading image from file {0}", filename);
 			// Fixed lock problem Bug #3431881
-			using (Stream imageFileStream = File.OpenRead(filename)) {
-				// And fixed problem that the bitmap stream is disposed... by Cloning the image
-				// This also ensures the bitmap is correctly created
-				
-				if (filename.EndsWith(".ico")) {
-					// Icon logic, try to get the Vista icon, else the biggest possible
-					try {
-						using (Image tmpImage = ExtractVistaIcon(imageFileStream)) {
-							if (tmpImage != null) {
-								fileImage = Clone(tmpImage);
-							}
-						}
-					} catch (Exception vistaIconException) {
-						LOG.Warn("Can't read icon from " + filename, vistaIconException);
-					}
-					if (fileImage == null) {
-						try {
-							// No vista icon, try normal icon
-							imageFileStream.Position = 0;
-							// We create a copy of the bitmap, so everything else can be disposed
-							using (Icon tmpIcon = new Icon(imageFileStream, new Size(1024,1024))) {
-								using (Image tmpImage = tmpIcon.ToBitmap()) {
-									fileImage = Clone(tmpImage);
-								}
-							}
-						} catch (Exception iconException) {
-							LOG.Warn("Can't read icon from " + filename, iconException);
-						}
-					}
-				}
-				if (fileImage == null) {
-					// We create a copy of the bitmap, so everything else can be disposed
-					imageFileStream.Position = 0;
-					using (Image tmpImage = Image.FromStream(imageFileStream, true, true)) {
-						LOG.DebugFormat("Loaded {0} with Size {1}x{2} and PixelFormat {3}", filename, tmpImage.Width, tmpImage.Height, tmpImage.PixelFormat);
-						fileImage = Clone(tmpImage);
-					}
-				}
+			using (Stream imageFileStream = File.OpenRead(filename))
+			{
+				fileImage = FromStream(imageFileStream);
 			}
 			if (fileImage != null) {
-				LOG.InfoFormat("Information about file {0}: {1}x{2}-{3} Resolution {4}x{5}", filename, fileImage.Width, fileImage.Height, fileImage.PixelFormat, fileImage.HorizontalResolution, fileImage.VerticalResolution);
+				Log.InfoFormat("Information about file {0}: {1}x{2}-{3} Resolution {4}x{5}", filename, fileImage.Width, fileImage.Height, fileImage.PixelFormat, fileImage.HorizontalResolution, fileImage.VerticalResolution);
 			}
-			// Make sure the orientation is set correctly so Greenshot can process the image correctly
-			Orientate(fileImage);
 			return fileImage;
 		}
 
@@ -325,20 +284,19 @@ namespace GreenshotPlugin.Core {
 		/// <param name="iconStream">Stream with the icon information</param>
 		/// <returns>Bitmap with the Vista Icon (256x256)</returns>
 		private static Bitmap ExtractVistaIcon(Stream iconStream) {
-			const int SizeICONDIR = 6;
-			const int SizeICONDIRENTRY = 16;
+			const int sizeIconDir = 6;
+			const int sizeIconDirEntry = 16;
 			Bitmap bmpPngExtracted = null;
 			try {
 				byte[] srcBuf = new byte[iconStream.Length];
 				iconStream.Read(srcBuf, 0, (int)iconStream.Length);
 				int iCount = BitConverter.ToInt16(srcBuf, 4);
 				for (int iIndex=0; iIndex<iCount; iIndex++) {
-					int iWidth  = srcBuf[SizeICONDIR + SizeICONDIRENTRY * iIndex];
-					int iHeight = srcBuf[SizeICONDIR + SizeICONDIRENTRY * iIndex + 1];
-					int iBitCount   = BitConverter.ToInt16(srcBuf, SizeICONDIR + SizeICONDIRENTRY * iIndex + 6);
+					int iWidth  = srcBuf[sizeIconDir + sizeIconDirEntry * iIndex];
+					int iHeight = srcBuf[sizeIconDir + sizeIconDirEntry * iIndex + 1];
 					if (iWidth == 0 && iHeight == 0) {
-						int iImageSize   = BitConverter.ToInt32(srcBuf, SizeICONDIR + SizeICONDIRENTRY * iIndex + 8);
-						int iImageOffset = BitConverter.ToInt32(srcBuf, SizeICONDIR + SizeICONDIRENTRY * iIndex + 12);
+						int iImageSize   = BitConverter.ToInt32(srcBuf, sizeIconDir + sizeIconDirEntry * iIndex + 8);
+						int iImageOffset = BitConverter.ToInt32(srcBuf, sizeIconDir + sizeIconDirEntry * iIndex + 12);
 						using (MemoryStream destStream = new MemoryStream()) {
 							destStream.Write(srcBuf, iImageOffset, iImageSize);
 							destStream.Seek(0, SeekOrigin.Begin);
@@ -818,18 +776,20 @@ namespace GreenshotPlugin.Core {
 			offset.Y += shadowSize - 1;
 			matrix.Translate(offset.X, offset.Y, MatrixOrder.Append);
 			// Create a new "clean" image
-			Bitmap returnImage = CreateEmpty(sourceBitmap.Width + (shadowSize * 2), sourceBitmap.Height + (shadowSize * 2), targetPixelformat, Color.Empty, sourceBitmap.HorizontalResolution, sourceBitmap.VerticalResolution);
+			Bitmap returnImage = CreateEmpty(sourceBitmap.Width + shadowSize * 2, sourceBitmap.Height + shadowSize * 2, targetPixelformat, Color.Empty, sourceBitmap.HorizontalResolution, sourceBitmap.VerticalResolution);
 			// Make sure the shadow is odd, there is no reason for an even blur!
 			if ((shadowSize & 1) == 0) {
 				shadowSize++;
 			}
-			bool useGDIBlur = GDIplus.IsBlurPossible(shadowSize);
+			bool useGdiBlur = GDIplus.IsBlurPossible(shadowSize);
 			// Create "mask" for the shadow
-			ColorMatrix maskMatrix = new ColorMatrix();
-			maskMatrix.Matrix00 = 0;
-			maskMatrix.Matrix11 = 0;
-			maskMatrix.Matrix22 = 0;
-			if (useGDIBlur) {
+			ColorMatrix maskMatrix = new ColorMatrix
+			{
+				Matrix00 = 0,
+				Matrix11 = 0,
+				Matrix22 = 0
+			};
+			if (useGdiBlur) {
 				maskMatrix.Matrix33 = darkness + 0.1f;
 			} else {
 				maskMatrix.Matrix33 = darkness;
@@ -838,7 +798,7 @@ namespace GreenshotPlugin.Core {
 			ApplyColorMatrix((Bitmap)sourceBitmap, Rectangle.Empty, returnImage, shadowRectangle, maskMatrix);
 
 			// blur "shadow", apply to whole new image
-			if (useGDIBlur) {
+			if (useGdiBlur) {
 				// Use GDI Blur
 				Rectangle newImageRectangle = new Rectangle(0, 0, returnImage.Width, returnImage.Height);
 				GDIplus.ApplyBlur(returnImage, newImageRectangle, shadowSize+1, false);
@@ -957,7 +917,7 @@ namespace GreenshotPlugin.Core {
 				for (int y = 0; y < fastBitmap.Height; y++) {
 					for (int x = 0; x < fastBitmap.Width; x++) {
 						Color color = fastBitmap.GetColorAt(x, y);
-						int colorBrightness = ((color.R + color.G + color.B) / 3 > threshold) ? 255 : 0;
+						int colorBrightness = (color.R + color.G + color.B) / 3 > threshold ? 255 : 0;
 						Color monoColor = Color.FromArgb(color.A, colorBrightness, colorBrightness, colorBrightness);
 						fastBitmap.SetColorAt(x, y, monoColor);
 					}
@@ -981,7 +941,7 @@ namespace GreenshotPlugin.Core {
 			matrix.Translate(offset.X, offset.Y, MatrixOrder.Append);
 
 			// Create a new "clean" image
-			Bitmap newImage = CreateEmpty(sourceImage.Width + (borderSize * 2), sourceImage.Height + (borderSize * 2), targetPixelformat, Color.Empty, sourceImage.HorizontalResolution, sourceImage.VerticalResolution);
+			Bitmap newImage = CreateEmpty(sourceImage.Width + borderSize * 2, sourceImage.Height + borderSize * 2, targetPixelformat, Color.Empty, sourceImage.HorizontalResolution, sourceImage.VerticalResolution);
 			using (Graphics graphics = Graphics.FromImage(newImage)) {
 				// Make sure we draw with the best quality!
 				graphics.SmoothingMode = SmoothingMode.HighQuality;
@@ -989,7 +949,7 @@ namespace GreenshotPlugin.Core {
 				graphics.CompositingQuality = CompositingQuality.HighQuality;
 				graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
 				using (GraphicsPath path = new GraphicsPath()) {
-					path.AddRectangle(new Rectangle(borderSize >> 1, borderSize >> 1, newImage.Width - (borderSize), newImage.Height - (borderSize)));
+					path.AddRectangle(new Rectangle(borderSize >> 1, borderSize >> 1, newImage.Width - borderSize, newImage.Height - borderSize));
 					using (Pen pen = new Pen(borderColor, borderSize)) {
 						pen.LineJoin = LineJoin.Round;
 						pen.StartCap = LineCap.Round;
@@ -1087,10 +1047,10 @@ namespace GreenshotPlugin.Core {
 		/// <param name="pixelformat">PixelFormat to check</param>
 		/// <returns>bool if we support it</returns>
 		public static bool SupportsPixelFormat(PixelFormat pixelformat) {
-			return (pixelformat.Equals(PixelFormat.Format32bppArgb) ||
+			return pixelformat.Equals(PixelFormat.Format32bppArgb) ||
 					pixelformat.Equals(PixelFormat.Format32bppPArgb) ||
 					pixelformat.Equals(PixelFormat.Format32bppRgb) ||
-					pixelformat.Equals(PixelFormat.Format24bppRgb));
+					pixelformat.Equals(PixelFormat.Format24bppRgb);
 		}
 
 		/// <summary>
@@ -1127,7 +1087,7 @@ namespace GreenshotPlugin.Core {
 		/// <param name="targetFormat">Target Format, use PixelFormat.DontCare if you want the original (or a default if the source PixelFormat is not supported)</param>
 		/// <returns></returns>
 		public static Bitmap CloneArea(Image sourceImage, Rectangle sourceRect, PixelFormat targetFormat) {
-			Bitmap newImage = null;
+			Bitmap newImage;
 			Rectangle bitmapRect = new Rectangle(0, 0, sourceImage.Width, sourceImage.Height);
 
 			// Make sure the source is not Rectangle.Empty
@@ -1150,11 +1110,7 @@ namespace GreenshotPlugin.Core {
 
 			// check the target format
 			if (!SupportsPixelFormat(targetFormat)) {
-				if (Image.IsAlphaPixelFormat(targetFormat)) {
-					targetFormat = PixelFormat.Format32bppArgb;
-				} else {
-					targetFormat = PixelFormat.Format24bppRgb;
-				}
+				targetFormat = Image.IsAlphaPixelFormat(targetFormat) ? PixelFormat.Format32bppArgb : PixelFormat.Format24bppRgb;
 			}
 
 			bool destinationIsTransparent = Image.IsAlphaPixelFormat(targetFormat);
@@ -1192,7 +1148,7 @@ namespace GreenshotPlugin.Core {
 					try {
 						newImage.SetPropertyItem(propertyItem);
 					} catch (Exception ex) {
-						LOG.Warn("Problem cloning a propertyItem.", ex);
+						Log.Warn("Problem cloning a propertyItem.", ex);
 					}
 				}
 			}
@@ -1261,7 +1217,7 @@ namespace GreenshotPlugin.Core {
 		/// <param name="percent">1-99 to make smaller, use 101 and more to make the picture bigger</param>
 		/// <returns></returns>
 		public static Bitmap ScaleByPercent(Bitmap sourceBitmap, int percent) {
-			float nPercent = ((float)percent/100);
+			float nPercent = (float)percent/100;
 			
 			int sourceWidth = sourceBitmap.Width;
 			int sourceHeight = sourceBitmap.Height;
@@ -1352,32 +1308,29 @@ namespace GreenshotPlugin.Core {
 		public static Image ResizeImage(Image sourceImage, bool maintainAspectRatio, bool canvasUseNewSize, Color backgroundColor, int newWidth, int newHeight, Matrix matrix) {
 			int destX = 0;
 			int destY = 0;
-			
-			float nPercentW = 0;
-			float nPercentH = 0;
-			
-			nPercentW = (newWidth / (float)sourceImage.Width);
-			nPercentH = (newHeight / (float)sourceImage.Height);
+
+			var nPercentW = newWidth / (float)sourceImage.Width;
+			var nPercentH = newHeight / (float)sourceImage.Height;
 			if (maintainAspectRatio) {
 				if (nPercentW == 1) {
 					nPercentW = nPercentH;
 					if (canvasUseNewSize) {
-						destX =  Math.Max(0, Convert.ToInt32((newWidth - (sourceImage.Width * nPercentW)) / 2));
+						destX =  Math.Max(0, Convert.ToInt32((newWidth - sourceImage.Width * nPercentW) / 2));
 					}
 				} else if (nPercentH == 1) {
 					nPercentH = nPercentW;
 					if (canvasUseNewSize) {
-						destY = Math.Max(0, Convert.ToInt32((newHeight - (sourceImage.Height * nPercentH)) / 2));
+						destY = Math.Max(0, Convert.ToInt32((newHeight - sourceImage.Height * nPercentH) / 2));
 					}
 				} else if (nPercentH != 0 && nPercentH < nPercentW) {
 					nPercentW = nPercentH;
 					if (canvasUseNewSize) {
-						destX =  Math.Max(0, Convert.ToInt32((newWidth - (sourceImage.Width * nPercentW)) / 2));
+						destX =  Math.Max(0, Convert.ToInt32((newWidth - sourceImage.Width * nPercentW) / 2));
 					}
 				} else {
 					nPercentH = nPercentW;
 					if (canvasUseNewSize) {
-						destY = Math.Max(0, Convert.ToInt32((newHeight - (sourceImage.Height * nPercentH)) / 2));
+						destY = Math.Max(0, Convert.ToInt32((newHeight - sourceImage.Height * nPercentH) / 2));
 					}
 				}
 			}
@@ -1390,17 +1343,13 @@ namespace GreenshotPlugin.Core {
 			if (newHeight == 0) {
 				newHeight = destHeight;
 			}
-			Image newImage = null;
+			Image newImage;
 			if (maintainAspectRatio && canvasUseNewSize) {
 				newImage = CreateEmpty(newWidth, newHeight, sourceImage.PixelFormat, backgroundColor, sourceImage.HorizontalResolution, sourceImage.VerticalResolution);
-				if (matrix != null) {
-					matrix.Scale((float)newWidth / sourceImage.Width, (float)newHeight / sourceImage.Height, MatrixOrder.Append);
-				}
+				matrix?.Scale((float)newWidth / sourceImage.Width, (float)newHeight / sourceImage.Height, MatrixOrder.Append);
 			} else {
 				newImage = CreateEmpty(destWidth, destHeight, sourceImage.PixelFormat, backgroundColor, sourceImage.HorizontalResolution, sourceImage.VerticalResolution);
-				if (matrix != null) {
-					matrix.Scale((float)destWidth / sourceImage.Width, (float)destHeight / sourceImage.Height, MatrixOrder.Append);
-				}
+				matrix?.Scale((float)destWidth / sourceImage.Width, (float)destHeight / sourceImage.Height, MatrixOrder.Append);
 			}
 
 			using (Graphics graphics = Graphics.FromImage(newImage)) {
@@ -1411,6 +1360,151 @@ namespace GreenshotPlugin.Core {
 				}
 			}
 			return newImage;
+		}
+
+		/// <summary>
+		/// Load a Greenshot surface from a stream
+		/// </summary>
+		/// <param name="surfaceFileStream">Stream</param>
+		/// <param name="returnSurface"></param>
+		/// <returns>ISurface</returns>
+		public static ISurface LoadGreenshotSurface(Stream surfaceFileStream, ISurface returnSurface)
+		{
+			Image fileImage;
+			// Fixed problem that the bitmap stream is disposed... by Cloning the image
+			// This also ensures the bitmap is correctly created
+
+			// We create a copy of the bitmap, so everything else can be disposed
+			surfaceFileStream.Position = 0;
+			using (Image tmpImage = Image.FromStream(surfaceFileStream, true, true))
+			{
+				Log.DebugFormat("Loaded .greenshot file with Size {0}x{1} and PixelFormat {2}", tmpImage.Width, tmpImage.Height, tmpImage.PixelFormat);
+				fileImage = Clone(tmpImage);
+			}
+			// Start at -14 read "GreenshotXX.YY" (XX=Major, YY=Minor)
+			const int markerSize = 14;
+			surfaceFileStream.Seek(-markerSize, SeekOrigin.End);
+			using (StreamReader streamReader = new StreamReader(surfaceFileStream))
+			{
+				var greenshotMarker = streamReader.ReadToEnd();
+				if (!greenshotMarker.StartsWith("Greenshot"))
+				{
+					throw new ArgumentException("Stream is not a Greenshot file!");
+				}
+				Log.InfoFormat("Greenshot file format: {0}", greenshotMarker);
+				const int filesizeLocation = 8 + markerSize;
+				surfaceFileStream.Seek(-filesizeLocation, SeekOrigin.End);
+				using (BinaryReader reader = new BinaryReader(surfaceFileStream))
+				{
+					long bytesWritten = reader.ReadInt64();
+					surfaceFileStream.Seek(-(bytesWritten + filesizeLocation), SeekOrigin.End);
+					returnSurface.LoadElementsFromStream(surfaceFileStream);
+				}
+			}
+			if (fileImage != null)
+			{
+				returnSurface.Image = fileImage;
+				Log.InfoFormat("Information about .greenshot file: {0}x{1}-{2} Resolution {3}x{4}", fileImage.Width, fileImage.Height, fileImage.PixelFormat, fileImage.HorizontalResolution, fileImage.VerticalResolution);
+			}
+			return returnSurface;
+		}
+
+		/// <summary>
+		/// Create an image from a stream, if an extension is supplied more formats are supported.
+		/// </summary>
+		/// <param name="stream">Stream</param>
+		/// <param name="extension"></param>
+		/// <returns>Image</returns>
+		public static Image FromStream(Stream stream, string extension = null)
+		{
+			if (!string.IsNullOrEmpty(extension))
+			{
+				extension = extension.Replace(".", "");
+			}
+
+			// Make sure we can try multiple times
+			if (!stream.CanSeek)
+			{
+				var memoryStream = new MemoryStream();
+				stream.CopyTo(memoryStream);
+				stream = memoryStream;
+			}
+
+			Image returnImage = null;
+
+			if ("ico".Equals(extension))
+			{
+				// Icon logic, try to get the Vista icon, else the biggest possible
+				try
+				{
+					using (Image tmpImage = ExtractVistaIcon(stream))
+					{
+						if (tmpImage != null)
+						{
+							returnImage = Clone(tmpImage, PixelFormat.Format32bppArgb);
+						}
+					}
+				}
+				catch (Exception vistaIconException)
+				{
+					Log.Warn("Can't read icon", vistaIconException);
+				}
+				if (returnImage == null)
+				{
+					try
+					{
+						// No vista icon, try normal icon
+						stream.Position = 0;
+						// We create a copy of the bitmap, so everything else can be disposed
+						using (Icon tmpIcon = new Icon(stream, new Size(1024, 1024)))
+						{
+							using (Image tmpImage = tmpIcon.ToBitmap())
+							{
+								returnImage = Clone(tmpImage, PixelFormat.Format32bppArgb);
+							}
+						}
+					}
+					catch (Exception iconException)
+					{
+						Log.Warn("Can't read icon", iconException);
+					}
+				}
+			}
+			if ("greenshot".Equals(extension))
+			{
+				stream.Position = 0;
+				var surface = LoadGreenshotSurface(stream, CreateSurface());
+				returnImage = surface.GetImageForExport();
+			}
+
+			if ("svg".Equals(extension))
+			{
+				stream.Position = 0;
+				try
+				{
+					var svgDoc = SvgDocument.Open<SvgDocument>(stream);
+					returnImage = CreateEmpty((int) svgDoc.Width, (int) svgDoc.Height, PixelFormat.Format32bppArgb, Color.Transparent, 96, 96);
+					svgDoc.Draw((Bitmap)returnImage);
+				}
+				catch (Exception ex)
+				{
+					Log.Error("Can'T load SVG", ex);
+				}
+			}
+
+			if (returnImage == null)
+			{
+				// We create a copy of the bitmap, so everything else can be disposed
+				stream.Position = 0;
+				using (Image tmpImage = Image.FromStream(stream, true, true))
+				{
+					Log.DebugFormat("Loaded bitmap with Size {0}x{1} and PixelFormat {2}", tmpImage.Width, tmpImage.Height, tmpImage.PixelFormat);
+					returnImage = Clone(tmpImage, PixelFormat.Format32bppArgb);
+				}
+			}
+			// Make sure the orientation is set correctly so Greenshot can process the image correctly
+			Orientate(returnImage);
+			return returnImage;
 		}
 	}
 }
